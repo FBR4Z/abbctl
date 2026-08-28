@@ -30,6 +30,7 @@ Commands:
   prog reset [--task <t>]                Reset program pointer to main
   prog pp                                Show program/motion pointer
   pos [--joints]                         Current robot position
+  speed [0-100]                          Read or set the speed ratio (%)
   log [-n <count>]                       Recent event log messages
   fs ls [path]                           List controller files
   fs get <remote> [local]                Download a file
@@ -103,6 +104,7 @@ Exit codes: 0 ok, 1 runtime error, 2 usage error.";
                     case "scan": return ScanCmd.Run(opts, cmdArgs);
                     case "info": return InfoCmd.RunInfo(opts, cmdArgs);
                     case "pos": return InfoCmd.RunPos(opts, cmdArgs);
+                    case "speed": return SpeedCmd.Run(opts, cmdArgs);
                     case "tasks": return ProgCmd.RunTasks(opts, cmdArgs);
                     case "io": return IoCmd.Run(opts, cmdArgs);
                     case "rapid": return RapidCmd.Run(opts, cmdArgs);
