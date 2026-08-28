@@ -119,6 +119,21 @@ rules, learned from a real SYSFAIL incident:
 `io create <name> --type DO --access ALL` creates a device-less (memory)
 signal writable by remote clients — safe, but still needs `restart`.
 
+### Background (SEMISTATIC/STATIC) tasks: stopping and editing
+
+- **The PC SDK cannot stop-and-hold a background task**: `task stop` is
+  undone instantly by the system supervisor, and setting `Task.Enabled=false`
+  does not stop it either (verified empirically). Only RobotStudio /
+  FlexPendant's task panel can hold one stopped, via a channel the SDK does
+  not expose.
+- **To pause its work remotely**: gate the task's loop with a PERS variable
+  and use `rapid set` (design pattern; no stop involved).
+- **To edit its module WITHOUT a controller restart**: ask the user to stop
+  the task from RobotStudio's task panel; then `prog load <mod> --task <t>
+  --replace` → `prog reset --task <t>` → `prog start` (global start runs the
+  panel-enabled tasks). A restart is only needed when creating a task or
+  changing its Type.
+
 ## 7. Known behaviors
 
 - `fs` paths are relative to the controller HOME directory; `fs ls` accepts
