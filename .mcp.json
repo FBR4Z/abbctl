@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "abb-robot": {
+      "command": "src/abbctl-mcp/bin/Release/abbctl-mcp.exe"
+    }
+  }
+}

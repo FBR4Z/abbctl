@@ -1,0 +1,56 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>abbctl-mcp</AssemblyName>
+    <RootNamespace>AbbCtl.Mcp</RootNamespace>
+    <Version>0.1.0</Version>
+    <Description>MCP server exposing ABB IRC5 controllers (PC SDK) as typed tools for AI clients</Description>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+
+  <!--
+    PC SDK probing (.NET 10 build of the DLLs). Override with ABB_PCSDK_NET_DIR.
+    RobotStudio 2026+ ships them in its Bin folder; a standalone PC SDK install
+    provides a net10.0 folder.
+  -->
+  <PropertyGroup>
+    <PcSdkNetProbe1>$(ABB_PCSDK_NET_DIR)</PcSdkNetProbe1>
+    <PcSdkNetProbe2>C:\Program Files (x86)\ABB\SDK\PCSDK\net10.0</PcSdkNetProbe2>
+    <PcSdkNetProbe3>C:\Program Files (x86)\ABB\RobotStudio 2026\Bin</PcSdkNetProbe3>
+
+    <PcSdkNetDir Condition="'$(PcSdkNetDir)' == '' And '$(PcSdkNetProbe1)' != '' And Exists('$(PcSdkNetProbe1)\ABB.Robotics.Controllers.PC.dll')">$(PcSdkNetProbe1)</PcSdkNetDir>
+    <PcSdkNetDir Condition="'$(PcSdkNetDir)' == '' And Exists('$(PcSdkNetProbe2)\ABB.Robotics.Controllers.PC.dll')">$(PcSdkNetProbe2)</PcSdkNetDir>
+    <PcSdkNetDir Condition="'$(PcSdkNetDir)' == '' And Exists('$(PcSdkNetProbe3)\ABB.Robotics.Controllers.PC.dll')">$(PcSdkNetProbe3)</PcSdkNetDir>
+  </PropertyGroup>
+
+  <Target Name="EnsurePcSdkNet" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="'$(PcSdkNetDir)' == ''" Text="PC SDK (.NET 10 build) not found. Install RobotStudio 2026+ or set ABB_PCSDK_NET_DIR to a folder containing the net10.0 ABB.Robotics.Controllers.PC.dll. See README.md." />
+  </Target>
+
+  <ItemGroup>
+    <Reference Include="ABB.Robotics.Controllers.PC">
+      <HintPath>$(PcSdkNetDir)\ABB.Robotics.Controllers.PC.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="RobotStudio.Services.RobApi">
+      <HintPath>$(PcSdkNetDir)\RobotStudio.Services.RobApi.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="RobotStudio.Services.RobApi.Desktop">
+      <HintPath>$(PcSdkNetDir)\RobotStudio.Services.RobApi.Desktop.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ModelContextProtocol" Version="2.2.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.0" />
+    <PackageReference Include="System.Configuration.ConfigurationManager" Version="10.0.11" />
+    <PackageReference Include="System.Diagnostics.PerformanceCounter" Version="10.0.11" />
+  </ItemGroup>
+
+</Project>

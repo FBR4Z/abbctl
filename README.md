@@ -102,6 +102,29 @@ happens — the natural building block for scripts and AI agents:
 - `--timeout <s>` bounds the wait: exit 3 if the awaited change never came.
 - `watch log` streams new event log messages as they are written.
 
+## MCP server (AI clients)
+
+`src/abbctl-mcp` is an [MCP](https://modelcontextprotocol.io) server exposing
+the same operations as ~18 typed tools (`robot_info`, `robot_load_module`,
+`robot_set_speed`, `robot_wait_signal`, ...) for Claude Code, Claude Desktop,
+Gemini CLI, Codex and any other MCP client — including clients that cannot
+run shell commands. It keeps one persistent controller connection (calls run
+in tens of milliseconds) and enforces the safety policy in code: write
+operations on a **real** controller are refused unless the call carries
+`confirm=true`, which the model is instructed to set only after asking the
+user.
+
+```powershell
+dotnet build src/abbctl-mcp/abbctl-mcp.csproj -c Release
+```
+
+Requires RobotStudio **2026+** (the server uses the .NET 10 build of the PC
+SDK; probe order: `ABB_PCSDK_NET_DIR`, standalone PC SDK `net10.0`,
+`RobotStudio 2026\Bin`). The repo's `.mcp.json` registers the server
+automatically for clients that support project-level MCP configuration
+(Claude Code asks for approval on first use). For Claude Desktop, add the
+built exe path to `claude_desktop_config.json` under `mcpServers`.
+
 ## Notes and limitations
 
 - **Motion cannot be commanded directly** through the PC SDK; motion always

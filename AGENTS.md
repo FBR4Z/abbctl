@@ -3,6 +3,17 @@
 You are operating `abbctl`, a CLI for ABB IRC5 robot controllers via the ABB
 PC SDK. Read this file fully before acting.
 
+## 0. MCP first
+
+If MCP tools named `robot_*` are available in your session (from this repo's
+`.mcp.json`, server `abb-robot`), **use them instead of running abbctl in the
+shell** — they are typed, faster (persistent connection), and enforce the
+safety policy in code. The CLI is the fallback for humans, scripts and
+agents without MCP support. Build the server once with:
+`dotnet build src/abbctl-mcp/abbctl-mcp.csproj -c Release`
+(requires RobotStudio 2026+ for the .NET 10 PC SDK DLLs; the CLI alone only
+needs 2024+).
+
 ## 1. Verify the environment (do this first)
 
 Run `./scripts/check-env.ps1`. It checks, and tells you how to fix:
