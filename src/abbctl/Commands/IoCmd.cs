@@ -18,6 +18,7 @@ namespace AbbCtl.Commands
                 case "list": return List(opts, args.Skip(1).ToArray());
                 case "get": return Get(opts, args.Skip(1).ToArray());
                 case "set": return Set(opts, args.Skip(1).ToArray());
+                case "create": return Create(opts, args.Skip(1).ToArray());
                 default:
                     throw new UsageException("unknown io subcommand '" + args[0] + "'");
             }
@@ -66,6 +67,59 @@ namespace AbbCtl.Commands
                     Json.Print(new JObj { { "name", sig.Name }, { "type", sig.Type.ToString() }, { "value", sig.Value } });
                 else
                     Console.WriteLine(sig.Value.ToString(CultureInfo.InvariantCulture));
+                return 0;
+            }
+        }
+
+        /// <summary>
+        /// Creates an EIO_SIGNAL configuration instance. Without --device the
+        /// signal has no I/O device (a "virtual"/memory signal). Takes effect
+        /// only after a warm start ('abbctl restart').
+        /// </summary>
+        private static int Create(GlobalOptions opts, string[] args)
+        {
+            if (args.Length < 1)
+                throw new UsageException("io create <name> --type DI|DO|AI|AO|GI|GO [--access ALL] [--device <dev> --map <n>] [--category <c>]");
+
+            string name = args[0];
+            string sigType = null, access = "All", device = null, map = null, category = null;
+            for (int i = 1; i < args.Length; i++)
+            {
+                switch (args[i])
+                {
+                    case "--type": if (++i < args.Length) sigType = args[i]; break;
+                    case "--access": if (++i < args.Length) access = args[i]; break;
+                    case "--device": if (++i < args.Length) device = args[i]; break;
+                    case "--map": if (++i < args.Length) map = args[i]; break;
+                    case "--category": if (++i < args.Length) category = args[i]; break;
+                }
+            }
+            if (sigType == null)
+                throw new UsageException("io create requires --type DI|DO|AI|AO|GI|GO");
+
+            using (var s = Session.Open(opts))
+            {
+                var eio = s.Controller.Configuration.Domains.Cast<ABB.Robotics.Controllers.ConfigurationDomain.Domain>()
+                    .First(d => d.Name == "EIO");
+                var type = eio.Types.Cast<ABB.Robotics.Controllers.ConfigurationDomain.Type>()
+                    .First(t => t.Name == "EIO_SIGNAL");
+
+                using (Mastership.Request(s.Controller))
+                {
+                    var inst = type.Create(name);
+                    inst.SetAttribute("SignalType", sigType.ToUpperInvariant());
+                    inst.SetAttribute("Access", access);
+                    if (device != null) inst.SetAttribute("Device", device);
+                    if (map != null) inst.SetAttribute("DeviceMap", map);
+                    if (category != null) inst.SetAttribute("Category", category);
+                }
+
+                if (opts.Json)
+                    Json.Print(new JObj { { "created", name }, { "type", sigType.ToUpperInvariant() },
+                        { "access", access }, { "note", "restart required ('abbctl restart')" } });
+                else
+                    Console.WriteLine("created signal " + name + " (" + sigType.ToUpperInvariant() +
+                        ", Access=" + access + ")  [restart required: 'abbctl restart']");
                 return 0;
             }
         }

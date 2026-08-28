@@ -96,7 +96,30 @@ watch log --follow --timeout 30 --json           # observe events for 30 s (exit
 `--until` also succeeds immediately if the value already matches at start.
 Always pass `--timeout` so you never block forever.
 
-## 6. Known behaviors
+## 6. Configuration changes (cfg, io create, task types) — DANGER ZONE
+
+Configuration edits only take effect after `restart` (warm start). Two hard
+rules, learned from a real SYSFAIL incident:
+
+1. **Never create a task with Type=SEMISTATIC or STATIC directly.** If its
+   Entry routine does not exist at the next boot, the controller enters
+   SYSFAIL — and SYSFAIL blocks all remote config writes, so you cannot fix
+   it remotely. abbctl refuses this unless you pass `--force`. Safe sequence:
+   ```
+   cfg create SYS CAB_TASKS T_BG Type=NORMAL MotionTask=FALSE TrustLevel=NoSafety
+   restart
+   prog load bg.mod --task T_BG        # module must contain the Entry routine (main)
+   cfg set SYS CAB_TASKS T_BG Type SEMISTATIC
+   restart
+   ```
+2. **On a real robot, treat every cfg change + restart as production-affecting**
+   and get explicit user confirmation first. Before any config experiment,
+   create a rollback point: `backup` (full system backup on the controller).
+
+`io create <name> --type DO --access ALL` creates a device-less (memory)
+signal writable by remote clients — safe, but still needs `restart`.
+
+## 7. Known behaviors
 
 - `fs` paths are relative to the controller HOME directory; `fs ls` accepts
   glob patterns (`fs ls "backups/*"`).

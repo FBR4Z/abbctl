@@ -15,6 +15,16 @@ Commands:
   scan                                   List controllers on the network
   info                                   Controller state, mode, system info
   tasks                                  List RAPID tasks
+  task list                              Tasks with type (Normal/Static/SemiStatic)
+  task start <name> | task stop <name>   Start/stop one task individually
+  io create <name> --type DO [...]       Create an I/O signal (needs restart)
+  cfg list [domain [type]]               Browse the configuration database
+  cfg get <dom> <type> <inst> [attr]     Read configuration
+  cfg set <dom> <type> <inst> <attr> <v> Write configuration (needs restart)
+  cfg create <dom> <type> <name> [A=V..] Create a config instance (needs restart)
+  cfg delete <dom> <type> <inst>         Delete a config instance (needs restart)
+  cfg load <file.cfg> [--mode add]       Load a .cfg file (needs restart)
+  restart [--no-wait]                    Warm start and wait for reconnection
   io list [--filter <substr>]            List I/O signals
   io get <signal>                        Read a signal
   io set <signal> <value>                Write a signal
@@ -114,6 +124,9 @@ Exit codes: 0 ok, 1 runtime error, 2 usage error.";
                     case "speed": return SpeedCmd.Run(opts, cmdArgs);
                     case "watch": return WatchCmd.Run(opts, cmdArgs);
                     case "tasks": return ProgCmd.RunTasks(opts, cmdArgs);
+                    case "task": return TaskCmd.Run(opts, cmdArgs);
+                    case "cfg": return CfgCmd.Run(opts, cmdArgs);
+                    case "restart": return RestartCmd.Run(opts, cmdArgs);
                     case "io": return IoCmd.Run(opts, cmdArgs);
                     case "rapid": return RapidCmd.Run(opts, cmdArgs);
                     case "prog": return ProgCmd.Run(opts, cmdArgs);
