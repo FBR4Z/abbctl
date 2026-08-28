@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Globalization;
 using System.Linq;
 using System.Threading;
@@ -101,10 +101,15 @@ namespace AbbCtl.Commands
             }
         }
 
-        /// <summary>Signals completion when a change (matching --until, if given) arrives.</summary>
-        private static void Arm(WatchOptions w, ManualResetEventSlim done, string observed)
+        /// <summary>
+        /// Signals completion when a change (matching --until, if given) arrives.
+        /// The initial reading only completes the wait when --until already
+        /// matches; without --until the point is to wait for a *change*.
+        /// </summary>
+        private static void Arm(WatchOptions w, ManualResetEventSlim done, string observed, bool isInitial = false)
         {
             if (w.Follow) return;
+            if (isInitial && w.Until == null) return;
             if (w.Until == null || ValuesEqual(w.Until, observed))
                 done.Set();
         }
@@ -148,7 +153,7 @@ namespace AbbCtl.Commands
                 var done = new ManualResetEventSlim(false);
                 Emit(opts, "io", sig.Name, sig.Value);
                 // The awaited value may already be present before any event fires.
-                Arm(w, done, sig.Value.ToString(CultureInfo.InvariantCulture));
+                Arm(w, done, sig.Value.ToString(CultureInfo.InvariantCulture), true);
 
                 sig.Changed += (sender, e) =>
                 {
@@ -172,7 +177,7 @@ namespace AbbCtl.Commands
                 var done = new ManualResetEventSlim(false);
                 string initial = rd.Value.ToString();
                 Emit(opts, "rapid", name, initial);
-                Arm(w, done, initial);
+                Arm(w, done, initial, true);
 
                 rd.ValueChanged += (sender, e) =>
                 {
@@ -192,7 +197,7 @@ namespace AbbCtl.Commands
                 var done = new ManualResetEventSlim(false);
                 string initial = s.Controller.Rapid.ExecutionStatus.ToString();
                 Emit(opts, "exec", "executionStatus", initial);
-                Arm(w, done, initial);
+                Arm(w, done, initial, true);
 
                 s.Controller.Rapid.ExecutionStatusChanged += (sender, e) =>
                 {
@@ -210,8 +215,8 @@ namespace AbbCtl.Commands
                 var done = new ManualResetEventSlim(false);
                 Emit(opts, "state", "controllerState", s.Controller.State.ToString());
                 Emit(opts, "state", "operatingMode", s.Controller.OperatingMode.ToString());
-                Arm(w, done, s.Controller.State.ToString());
-                Arm(w, done, s.Controller.OperatingMode.ToString());
+                Arm(w, done, s.Controller.State.ToString(), true);
+                Arm(w, done, s.Controller.OperatingMode.ToString(), true);
 
                 s.Controller.StateChanged += (sender, e) =>
                 {

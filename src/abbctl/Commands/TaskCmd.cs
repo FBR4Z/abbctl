@@ -65,13 +65,26 @@ namespace AbbCtl.Commands
                     if (start)
                     {
                         StartResult r = t.Start();
-                        if (r != StartResult.Ok)
+                        if (r != StartResult.Ok && t.ExecutionStatus != TaskExecutionStatus.Running)
                             throw new Exception("start of task " + t.Name + " failed: " + r);
                     }
                     else
                     {
                         t.Stop(StopMode.Immediate);
                     }
+                }
+
+                // Background tasks are restarted by the system supervisor; a
+                // "successful" stop that did not stick must be reported as such.
+                if (!start && t.TaskType != TaskType.Normal)
+                {
+                    System.Threading.Thread.Sleep(700);
+                    if (t.ExecutionStatus == TaskExecutionStatus.Running)
+                        throw new Exception("task " + t.Name + " is " + t.TaskType +
+                            " and the system supervisor restarted it immediately. To actually stop it: " +
+                            "control it via a PERS variable in its RAPID loop ('abbctl rapid set'), or make " +
+                            "the stop permanent with 'abbctl cfg set SYS CAB_TASKS " + t.Name +
+                            " Type NORMAL' + 'abbctl restart'.");
                 }
 
                 if (opts.Json)
