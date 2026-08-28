@@ -31,6 +31,13 @@ Commands:
   prog pp                                Show program/motion pointer
   pos [--joints]                         Current robot position
   speed [0-100]                          Read or set the speed ratio (%)
+  watch io <signal>                      Block until a signal changes
+  watch rapid <task> <module> <symbol>   Block until a PERS value changes
+  watch exec                             Block until execution status changes
+  watch state                            Block until controller state/mode changes
+  watch log                              Stream new event log messages
+    watch options: [--until <value>] [--follow] [--timeout <s>]
+    exit 0 = change/until reached; exit 3 = timeout
   log [-n <count>]                       Recent event log messages
   fs ls [path]                           List controller files
   fs get <remote> [local]                Download a file
@@ -105,6 +112,7 @@ Exit codes: 0 ok, 1 runtime error, 2 usage error.";
                     case "info": return InfoCmd.RunInfo(opts, cmdArgs);
                     case "pos": return InfoCmd.RunPos(opts, cmdArgs);
                     case "speed": return SpeedCmd.Run(opts, cmdArgs);
+                    case "watch": return WatchCmd.Run(opts, cmdArgs);
                     case "tasks": return ProgCmd.RunTasks(opts, cmdArgs);
                     case "io": return IoCmd.Run(opts, cmdArgs);
                     case "rapid": return RapidCmd.Run(opts, cmdArgs);

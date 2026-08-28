@@ -21,6 +21,10 @@ abbctl rapid get T_ROB1 MainModule nCount
 abbctl rapid set T_ROB1 MainModule nCount 10
 abbctl io list / get / set
 abbctl pos [--joints]              # current TCP / joint position
+abbctl speed 25                    # set the controller speed ratio (%)
+abbctl watch io DO_PICK_DONE --until 1 --timeout 60   # block on events, no polling
+abbctl watch exec --until stopped  # wait for the program to stop
+abbctl watch log --follow          # stream controller events live
 abbctl log -n 20                   # controller event log
 abbctl fs ls / get / put           # controller file system (HOME)
 abbctl backup                      # full system backup on the controller disk
@@ -85,6 +89,18 @@ operation and take effect immediately.
 
 For runtime parameter changes without stopping the program, use RAPID
 persistents and `abbctl rapid set`.
+
+## Waiting on the robot (events, not polling)
+
+`abbctl watch` subscribes to controller events and blocks until something
+happens — the natural building block for scripts and AI agents:
+
+- `watch io <signal>` / `watch rapid <task> <module> <symbol>` (PERS only) /
+  `watch exec` / `watch state` — exit 0 on the first change, or when
+  `--until <value>` is reached (also if the value already matches at start).
+- `--follow` streams changes indefinitely (NDJSON with `--json`).
+- `--timeout <s>` bounds the wait: exit 3 if the awaited change never came.
+- `watch log` streams new event log messages as they are written.
 
 ## Notes and limitations
 

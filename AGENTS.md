@@ -74,6 +74,17 @@ prog start
 the event log contains the controller-side reason (syntax errors, safety
 rejections, etc.).
 
+**Wait for something to happen — never poll in a loop**: use `watch`, which
+blocks on controller events:
+```
+watch io DO_PICK_DONE --until 1 --timeout 120   # exit 0 when reached, 3 on timeout
+watch exec --until stopped --timeout 300         # wait for cycle end
+watch rapid T_ROB1 MainModule nState --until 2   # PERS variables only
+watch log --follow --timeout 30 --json           # observe events for 30 s (exit 0)
+```
+`--until` also succeeds immediately if the value already matches at start.
+Always pass `--timeout` so you never block forever.
+
 ## 6. Known behaviors
 
 - `fs` paths are relative to the controller HOME directory; `fs ls` accepts
