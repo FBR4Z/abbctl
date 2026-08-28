@@ -1,0 +1,59 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>7.3</LangVersion>
+    <AssemblyName>abbctl</AssemblyName>
+    <RootNamespace>AbbCtl</RootNamespace>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <Version>0.1.0</Version>
+    <Description>CLI for ABB IRC5 controllers via PC SDK (PC Interface)</Description>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+
+  <!--
+    PC SDK probing. ABB's DLLs are not redistributable via NuGet/GitHub, so we
+    reference them from a local RobotStudio or PC SDK installation.
+    Override with the ABB_PCSDK_DIR environment variable (a folder that
+    contains ABB.Robotics.Controllers.PC.dll for .NET Framework 4.8).
+  -->
+  <PropertyGroup>
+    <PcSdkProbe1>$(ABB_PCSDK_DIR)</PcSdkProbe1>
+    <PcSdkProbe2>C:\Program Files (x86)\ABB\SDK\PCSDK\net48</PcSdkProbe2>
+    <PcSdkProbe3>C:\Program Files (x86)\ABB\RobotStudio 2026\Bin-net48</PcSdkProbe3>
+    <PcSdkProbe4>C:\Program Files (x86)\ABB\RobotStudio 2025\Bin</PcSdkProbe4>
+    <PcSdkProbe5>C:\Program Files (x86)\ABB\RobotStudio 2024\Bin</PcSdkProbe5>
+
+    <PcSdkDir Condition="'$(PcSdkDir)' == '' And '$(PcSdkProbe1)' != '' And Exists('$(PcSdkProbe1)\ABB.Robotics.Controllers.PC.dll')">$(PcSdkProbe1)</PcSdkDir>
+    <PcSdkDir Condition="'$(PcSdkDir)' == '' And Exists('$(PcSdkProbe2)\ABB.Robotics.Controllers.PC.dll')">$(PcSdkProbe2)</PcSdkDir>
+    <PcSdkDir Condition="'$(PcSdkDir)' == '' And Exists('$(PcSdkProbe3)\ABB.Robotics.Controllers.PC.dll')">$(PcSdkProbe3)</PcSdkDir>
+    <PcSdkDir Condition="'$(PcSdkDir)' == '' And Exists('$(PcSdkProbe4)\ABB.Robotics.Controllers.PC.dll')">$(PcSdkProbe4)</PcSdkDir>
+    <PcSdkDir Condition="'$(PcSdkDir)' == '' And Exists('$(PcSdkProbe5)\ABB.Robotics.Controllers.PC.dll')">$(PcSdkProbe5)</PcSdkDir>
+  </PropertyGroup>
+
+  <Target Name="EnsurePcSdk" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="'$(PcSdkDir)' == ''"
+           Text="PC SDK not found. Install RobotStudio (2024+) or the ABB PC SDK, or set the ABB_PCSDK_DIR environment variable to a folder containing ABB.Robotics.Controllers.PC.dll (net48 build). See README.md, section 'Requirements'." />
+  </Target>
+
+  <ItemGroup>
+    <Reference Include="ABB.Robotics.Controllers.PC">
+      <HintPath>$(PcSdkDir)\ABB.Robotics.Controllers.PC.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="RobotStudio.Services.RobApi">
+      <HintPath>$(PcSdkDir)\RobotStudio.Services.RobApi.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="RobotStudio.Services.RobApi.Desktop">
+      <HintPath>$(PcSdkDir)\RobotStudio.Services.RobApi.Desktop.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>
