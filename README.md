@@ -25,6 +25,10 @@ abbctl speed 25                    # set the controller speed ratio (%)
 abbctl watch io DO_PICK_DONE --until 1 --timeout 60   # block on events, no polling
 abbctl watch exec --until stopped  # wait for the program to stop
 abbctl watch log --follow          # stream controller events live
+abbctl task start/stop T_BACK      # control one task individually
+abbctl cfg get EIO EIO_SIGNAL do1  # read/write the configuration database
+abbctl io create DO_X --type DO --access ALL   # new signal (needs restart)
+abbctl restart                     # remote warm start, waits for reconnection
 abbctl log -n 20                   # controller event log
 abbctl fs ls / get / put           # controller file system (HOME)
 abbctl backup                      # full system backup on the controller disk
@@ -124,6 +128,18 @@ SDK; probe order: `ABB_PCSDK_NET_DIR`, standalone PC SDK `net10.0`,
 automatically for clients that support project-level MCP configuration
 (Claude Code asks for approval on first use). For Claude Desktop, add the
 built exe path to `claude_desktop_config.json` under `mcpServers`.
+
+## Configuration changes and background tasks
+
+`cfg`, `io create` and task-type changes edit the configuration database and
+require a warm start (`abbctl restart`) to take effect. **Never create a
+SEMISTATIC/STATIC task before its program exists** — the controller enters
+SYSFAIL at boot and remote configuration writes are blocked in that state
+(abbctl refuses it without `--force`). The safe sequence is: create the task
+as `Type=NORMAL` → `restart` → `prog load` a module containing the Entry
+routine → `cfg set ... Type SEMISTATIC` → `restart`. Background tasks are
+auto-restarted by the system supervisor after a stop; their `TrustLevel`
+decides what happens to the system when they stop (`NoSafety` = nothing).
 
 ## Notes and limitations
 

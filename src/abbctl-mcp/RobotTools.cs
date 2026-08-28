@@ -50,6 +50,8 @@ public static class RobotTools
         var tasks = c.Rapid.GetTasks().Select(t => new
         {
             task = t.Name,
+            taskType = t.TaskType.ToString(),
+            motion = t.Motion,
             executionStatus = t.ExecutionStatus.ToString(),
             programPointer = DescribePointer(() => t.ProgramPointer),
             motionPointer = DescribePointer(() => t.MotionPointer)
@@ -378,6 +380,198 @@ public static class RobotTools
                 c.Rapid.ExecutionStatusChanged -= Handler;
             }
         });
+
+    // ---------- per-task control ----------
+
+    [McpServerTool(Name = "robot_task_control")]
+    [Description("Start or stop ONE RAPID task individually (others keep running). Note: SEMISTATIC/STATIC background tasks are auto-restarted by the system supervisor after a stop, and stopping one whose TrustLevel is not NoSafety halts the whole system.")]
+    public static string TaskControl(
+        [Description("'start' or 'stop'")] string action,
+        [Description("Task name, e.g. T_ROB1 or T_BACK")] string task,
+        [Description("Required true when the controller is a real robot (after user approval)")] bool confirm = false)
+        => RobotSession.Use(c =>
+        {
+            var t = ResolveTask(c, task);
+            bool start = action.Equals("start", StringComparison.OrdinalIgnoreCase);
+            if (start) RobotSession.EnsureWriteAllowed(c, confirm, "start task " + t.Name);
+
+            using (Mastership.Request(c))
+            {
+                if (start)
+                {
+                    var r = t.Start();
+                    if (r != StartResult.Ok && t.ExecutionStatus != TaskExecutionStatus.Running)
+                        throw new RobotToolException($"start of task {t.Name} failed: {r}");
+                }
+                else
+                {
+                    t.Stop(StopMode.Immediate);
+                }
+            }
+            return ToJson(new { task = t.Name, action, executionStatus = t.ExecutionStatus.ToString() });
+        });
+
+    // ---------- configuration ----------
+
+    [McpServerTool(Name = "robot_cfg_read")]
+    [Description("Browse/read the controller configuration database. No args: list domains (SYS, EIO, MOC, ...). With domain: list types. With domain+type: list instances. With domain+type+instance: all attributes and values.")]
+    public static string CfgRead(
+        [Description("Domain name, e.g. EIO or SYS")] string? domain = null,
+        [Description("Type name, e.g. EIO_SIGNAL or CAB_TASKS")] string? type = null,
+        [Description("Instance name, e.g. a signal or task name")] string? instance = null)
+        => RobotSession.Use(c =>
+        {
+            if (domain == null)
+                return ToJson(c.Configuration.Domains.Select(d => d.Name));
+            var dom = c.Configuration.Domains.FirstOrDefault(d =>
+                          d.Name.Equals(domain, StringComparison.OrdinalIgnoreCase))
+                      ?? throw new RobotToolException($"domain '{domain}' not found");
+            if (type == null)
+                return ToJson(dom.Types.Select(t => t.Name));
+            var ty = dom.Types.FirstOrDefault(t => t.Name.Equals(type, StringComparison.OrdinalIgnoreCase))
+                     ?? throw new RobotToolException($"type '{type}' not found in {dom.Name}");
+            if (instance == null)
+                return ToJson(ty.GetInstances().Select(i => i.Name));
+            var inst = ty.GetInstance(instance)
+                       ?? throw new RobotToolException($"instance '{instance}' not found");
+            var attrs = new Dictionary<string, string?>();
+            foreach (ABB.Robotics.Controllers.ConfigurationDomain.Attribute a in ty.Attributes)
+            {
+                try { attrs[a.Name] = inst.GetAttribute(a.Name)?.ToString(); }
+                catch { attrs[a.Name] = "(unreadable)"; }
+            }
+            return ToJson(attrs);
+        });
+
+    [McpServerTool(Name = "robot_cfg_write")]
+    [Description("Modify the configuration database: op='set' changes one attribute of an existing instance; op='create' creates an instance (attributes as 'Name=Value' strings); op='delete' removes one. Changes ONLY take effect after robot_restart. DANGER: creating a task with Type=SEMISTATIC/STATIC whose Entry routine does not exist puts the controller in unrecoverable-remotely SYSFAIL at the next restart; create tasks as NORMAL, load their program, then set Type=SEMISTATIC (forceSemistaticTask overrides this guard only when the program already exists).")]
+    public static string CfgWrite(
+        [Description("'set', 'create' or 'delete'")] string op,
+        [Description("Domain, e.g. EIO or SYS")] string domain,
+        [Description("Type, e.g. EIO_SIGNAL or CAB_TASKS")] string type,
+        [Description("Instance name")] string instance,
+        [Description("For set: attribute name. For create: ignored")] string? attribute = null,
+        [Description("For set: new value. For create: array of 'Name=Value' pairs")] string[]? values = null,
+        [Description("Required true when the controller is a real robot (after user approval)")] bool confirm = false,
+        [Description("Allow creating a SEMISTATIC/STATIC task directly (only if its program already exists)")] bool forceSemistaticTask = false)
+        => RobotSession.Use(c =>
+        {
+            RobotSession.EnsureWriteAllowed(c, confirm, $"cfg {op} {domain}/{type}/{instance}");
+            var dom = c.Configuration.Domains.FirstOrDefault(d =>
+                          d.Name.Equals(domain, StringComparison.OrdinalIgnoreCase))
+                      ?? throw new RobotToolException($"domain '{domain}' not found");
+            var ty = dom.Types.FirstOrDefault(t => t.Name.Equals(type, StringComparison.OrdinalIgnoreCase))
+                     ?? throw new RobotToolException($"type '{type}' not found in {dom.Name}");
+
+            switch (op.ToLowerInvariant())
+            {
+                case "set":
+                    if (attribute == null || values is not { Length: > 0 })
+                        throw new RobotToolException("op='set' needs attribute and values=[newValue]");
+                    var instSet = ty.GetInstance(instance)
+                                  ?? throw new RobotToolException($"instance '{instance}' not found");
+                    using (Mastership.Request(c))
+                        instSet.SetAttribute(attribute, values[0]);
+                    break;
+
+                case "create":
+                    var pairs = values ?? Array.Empty<string>();
+                    bool risky = domain.Equals("SYS", StringComparison.OrdinalIgnoreCase) &&
+                        type.Equals("CAB_TASKS", StringComparison.OrdinalIgnoreCase) &&
+                        pairs.Any(p => p.StartsWith("Type=", StringComparison.OrdinalIgnoreCase) &&
+                            (p.EndsWith("SEMISTATIC", StringComparison.OrdinalIgnoreCase) ||
+                             p.EndsWith("STATIC", StringComparison.OrdinalIgnoreCase)));
+                    if (risky && !forceSemistaticTask)
+                        throw new RobotToolException(
+                            "REFUSED: create the task with Type=NORMAL, robot_restart, load its program " +
+                            "(robot_load_module), then set Type=SEMISTATIC and restart again. A background " +
+                            "task without its Entry routine causes SYSFAIL at boot, unrecoverable remotely.");
+                    using (Mastership.Request(c))
+                    {
+                        var created = ty.Create(instance);
+                        foreach (var pair in pairs)
+                        {
+                            int eq = pair.IndexOf('=');
+                            if (eq <= 0) throw new RobotToolException($"attribute must be Name=Value, got '{pair}'");
+                            created.SetAttribute(pair[..eq], pair[(eq + 1)..]);
+                        }
+                    }
+                    break;
+
+                case "delete":
+                    var instDel = ty.GetInstance(instance)
+                                  ?? throw new RobotToolException($"instance '{instance}' not found");
+                    using (Mastership.Request(c))
+                        instDel.Delete();
+                    break;
+
+                default:
+                    throw new RobotToolException("op must be 'set', 'create' or 'delete'");
+            }
+            return ToJson(new { op, path = $"{domain}/{type}/{instance}", note = "restart required (robot_restart)" });
+        });
+
+    [McpServerTool(Name = "robot_io_create")]
+    [Description("Create a new I/O signal (EIO_SIGNAL config instance). Without a device it is a memory ('virtual') signal. Access='All' makes it writable by remote clients. Takes effect only after robot_restart.")]
+    public static string IoCreate(
+        [Description("Signal name")] string name,
+        [Description("DI, DO, AI, AO, GI or GO")] string signalType,
+        [Description("Access level; 'All' allows remote writes")] string access = "All",
+        [Description("Required true when the controller is a real robot (after user approval)")] bool confirm = false)
+        => RobotSession.Use(c =>
+        {
+            RobotSession.EnsureWriteAllowed(c, confirm, "create signal " + name);
+            var eio = c.Configuration.Domains.First(d => d.Name == "EIO");
+            var ty = eio.Types.First(t => t.Name == "EIO_SIGNAL");
+            using (Mastership.Request(c))
+            {
+                var inst = ty.Create(name);
+                inst.SetAttribute("SignalType", signalType.ToUpperInvariant());
+                inst.SetAttribute("Access", access);
+            }
+            return ToJson(new { created = name, signalType = signalType.ToUpperInvariant(), access,
+                                note = "restart required (robot_restart)" });
+        });
+
+    [McpServerTool(Name = "robot_restart")]
+    [Description("Warm start the controller (required for configuration changes to take effect) and wait for it to come back. The controller is offline for the duration (~5 s virtual, 30-60 s real); RAPID execution stops.")]
+    public static string Restart(
+        [Description("Required true when the controller is a real robot (after user approval)")] bool confirm = false)
+    {
+        string name = RobotSession.Use(c =>
+        {
+            RobotSession.EnsureWriteAllowed(c, confirm, "warm start");
+            try
+            {
+                using (Mastership.Request(c))
+                    c.Restart();
+            }
+            catch
+            {
+                // In SYSFAIL, mastership is rejected but a plain restart is the
+                // sanctioned recovery path.
+                c.Restart();
+            }
+            return c.SystemName;
+        });
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        Thread.Sleep(5000);
+        while (sw.Elapsed.TotalSeconds < 180)
+        {
+            try
+            {
+                var back = RobotSession.Discover().FirstOrDefault(ci =>
+                    ci.SystemName.Equals(name, StringComparison.OrdinalIgnoreCase) &&
+                    ci.Availability.ToString() == "Available");
+                if (back != null)
+                    return ToJson(new { restarted = name, seconds = (int)sw.Elapsed.TotalSeconds });
+            }
+            catch { }
+            Thread.Sleep(2000);
+        }
+        throw new RobotToolException($"{name} did not come back within 180 s");
+    }
 
     // ---------- helpers ----------
 
