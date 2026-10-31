@@ -25,7 +25,8 @@ abbctl speed 25                    # set the controller speed ratio (%)
 abbctl watch io DO_PICK_DONE --until 1 --timeout 60   # block on events, no polling
 abbctl watch exec --until stopped  # wait for the program to stop
 abbctl watch log --follow          # stream controller events live
-abbctl monitor --interval 1        # read-only live feed (NDJSON) for HMIs
+abbctl monitor --io DO_CYCLE --parent-stdin   # read-only live feed (NDJSON) for HMIs
+abbctl pos --rapid                 # robtarget in the active wobj, with tool and wobj names
 abbctl task start/stop T_BACK      # control one task individually
 abbctl cfg get EIO EIO_SIGNAL do1  # read/write the configuration database
 abbctl io create DO_X --type DO --access ALL   # new signal (needs restart)

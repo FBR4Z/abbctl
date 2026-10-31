@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using ABB.Robotics.Controllers.MotionDomain;
 
@@ -32,9 +32,35 @@ namespace AbbCtl.Commands
             }
         }
 
+        /// <summary>
+        /// The TCP as a RAPID robtarget in the ACTIVE work object, with the active
+        /// tool and wobj names: what a "teach this point" needs.
+        /// </summary>
+        private static int RunPosRapid(GlobalOptions opts)
+        {
+            using (var s = Session.Open(opts))
+            {
+                var c = s.Controller;
+                MechanicalUnit unit = c.MotionSystem.ActiveMechanicalUnit;
+                var rt = unit.GetPosition(CoordinateSystemType.WorkObject);
+                var o = new JObj
+                {
+                    { "unit", unit.Name },
+                    { "tool", unit.Tool },
+                    { "wobj", unit.WorkObject },
+                    { "robtarget", rt.ToString() }
+                };
+                if (opts.Json) { Json.Print(o); return 0; }
+                Console.WriteLine("{0} (tool {1}, wobj {2}): {3}", unit.Name, unit.Tool, unit.WorkObject, rt);
+                return 0;
+            }
+        }
+
         public static int RunPos(GlobalOptions opts, string[] args)
         {
             bool joints = args.Contains("--joints");
+            if (args.Contains("--rapid"))
+                return RunPosRapid(opts);
 
             using (var s = Session.Open(opts))
             {

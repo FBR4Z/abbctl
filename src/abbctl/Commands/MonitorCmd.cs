@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -14,7 +14,8 @@ namespace AbbCtl.Commands
     /// Read-only live feed for HMIs (Hefesto): one connection, one NDJSON line per
     /// change. Starts with a "snapshot", then "state", "opmode", "exec" and "log"
     /// as the controller reports them, and "speed" / "joints" sampled every
-    /// --interval seconds (only when they change). Ends with "disconnected"
+    /// --interval seconds (only when they change), "pp" (program pointer of the
+    /// motion task) while it moves and "io" for the --io signals. Ends with "disconnected"
     /// (exit 4) when the controller goes away, so the caller can restart it.
     /// </summary>
     internal static class MonitorCmd
@@ -24,12 +25,17 @@ namespace AbbCtl.Commands
         public static int Run(GlobalOptions opts, string[] args)
         {
             double interval = 1.0;
+            var signals = new List<string>();
             for (int i = 0; i < args.Length; i++)
             {
                 if (args[i] == "--interval" && i + 1 < args.Length)
                     interval = Math.Max(0.2, double.Parse(args[++i], CultureInfo.InvariantCulture));
+                else if (args[i] == "--io" && i + 1 < args.Length)
+                    signals.AddRange(args[++i].Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries));
+                else if (args[i] == "--parent-stdin")
+                    WatchParent();
                 else
-                    throw new UsageException("monitor [--interval <s>]");
+                    throw new UsageException("monitor [--interval <s>] [--io SIG1,SIG2] [--parent-stdin]");
             }
 
             using (var s = Session.Open(opts))
@@ -41,6 +47,9 @@ namespace AbbCtl.Commands
 
                 double[] joints = ReadJoints(robot);
                 int speed = c.MotionSystem.SpeedRatio;
+                ABB.Robotics.Controllers.RapidDomain.Task motionTask = c.Rapid.GetTasks()
+                    .FirstOrDefault(t => t.Motion) ?? c.Rapid.GetTasks().FirstOrDefault();
+                string pp = Pointer(motionTask);
                 Emit(new JObj
                 {
                     { "type", "snapshot" },
@@ -53,8 +62,27 @@ namespace AbbCtl.Commands
                     { "executionStatus", c.Rapid.ExecutionStatus.ToString() },
                     { "speedRatio", speed },
                     { "robot", robot != null ? robot.Name : null },
-                    { "joints", joints }
+                    { "joints", joints },
+                    { "task", motionTask != null ? motionTask.Name : null },
+                    { "pp", pp }
                 });
+
+                foreach (string name in signals)
+                {
+                    try
+                    {
+                        var signal = (ABB.Robotics.Controllers.IOSystemDomain.Signal)c.IOSystem.GetSignal(name);
+                        Emit(new JObj { { "type", "io" }, { "time", Now() }, { "name", name }, { "value", signal.Value } });
+                        signal.Changed += (sender, e) => Emit(new JObj
+                        {
+                            { "type", "io" }, { "time", Now() }, { "name", name }, { "value", e.NewSignalState.Value }
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.Error.WriteLine("monitor: signal " + name + ": " + ex.Message);
+                    }
+                }
 
                 c.StateChanged += (sender, e) => Emit(Change("state", e.NewState.ToString()));
                 c.OperatingModeChanged += (sender, e) => Emit(Change("opmode", e.NewMode.ToString()));
@@ -68,7 +96,8 @@ namespace AbbCtl.Commands
                         { "time", Now() },
                         { "severity", Severity(m.Type) },
                         { "code", m.CategoryId + "-" + m.Number },
-                        { "title", m.Title }
+                        { "title", m.Title },
+                        { "body", m.Body }
                     });
                 };
 
@@ -84,6 +113,12 @@ namespace AbbCtl.Commands
                         {
                             speed = newSpeed;
                             Emit(Change("speed", speed));
+                        }
+                        string newPp = Pointer(motionTask);
+                        if (newPp != pp)
+                        {
+                            pp = newPp;
+                            Emit(Change("pp", pp));
                         }
                         double[] newJoints = ReadJoints(robot);
                         if (Moved(joints, newJoints))
@@ -101,6 +136,31 @@ namespace AbbCtl.Commands
                 Emit(Change("disconnected", c.SystemName));
                 return 4;
             }
+        }
+
+        /// <summary>
+        /// --parent-stdin: the caller keeps our stdin open; when it ends (the caller
+        /// exited or crashed), exit too instead of monitoring forever as an orphan.
+        /// </summary>
+        private static void WatchParent()
+        {
+            var thread = new Thread(() =>
+            {
+                try { while (Console.In.Read() >= 0) { } } catch { }
+                Environment.Exit(5);
+            }) { IsBackground = true };
+            thread.Start();
+        }
+
+        /// <summary>"Module/routine:row" of the program pointer, or null.</summary>
+        private static string Pointer(ABB.Robotics.Controllers.RapidDomain.Task task)
+        {
+            try
+            {
+                var p = task?.ProgramPointer;
+                return p == null || string.IsNullOrEmpty(p.Module) ? null : p.Module + "/" + p.Routine + ":" + p.Range.Begin.Row;
+            }
+            catch { return null; }
         }
 
         private static double[] ReadJoints(MechanicalUnit robot)

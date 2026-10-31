@@ -39,7 +39,7 @@ Commands:
   prog stop                              Stop RAPID execution
   prog reset [--task <t>]                Reset program pointer to main
   prog pp                                Show program/motion pointer
-  pos [--joints]                         Current robot position
+  pos [--joints | --rapid]               Current position (--rapid: robtarget in active wobj)
   speed [0-100]                          Read or set the speed ratio (%)
   watch io <signal>                      Block until a signal changes
   watch rapid <task> <module> <symbol>   Block until a PERS value changes
@@ -47,7 +47,7 @@ Commands:
   watch state                            Block until controller state/mode changes
   watch log                              Stream new event log messages
     watch options: [--until <value>] [--follow] [--timeout <s>]
-  monitor [--interval <s>]               Read-only live feed (NDJSON) for HMIs
+  monitor [--interval <s>] [--io A,B]    Read-only live feed (NDJSON) for HMIs
     exit 0 = change/until reached; exit 3 = timeout
   log [-n <count>]                       Recent event log messages
   fs ls [path]                           List controller files
