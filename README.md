@@ -25,6 +25,7 @@ abbctl speed 25                    # set the controller speed ratio (%)
 abbctl watch io DO_PICK_DONE --until 1 --timeout 60   # block on events, no polling
 abbctl watch exec --until stopped  # wait for the program to stop
 abbctl watch log --follow          # stream controller events live
+abbctl monitor --interval 1        # read-only live feed (NDJSON) for HMIs
 abbctl task start/stop T_BACK      # control one task individually
 abbctl cfg get EIO EIO_SIGNAL do1  # read/write the configuration database
 abbctl io create DO_X --type DO --access ALL   # new signal (needs restart)
@@ -128,6 +129,21 @@ SDK; probe order: `ABB_PCSDK_NET_DIR`, standalone PC SDK `net10.0`,
 automatically for clients that support project-level MCP configuration
 (Claude Code asks for approval on first use). For Claude Desktop, add the
 built exe path to `claude_desktop_config.json` under `mcpServers`.
+
+### Environment variables for HMIs (e.g. Hefesto)
+
+An HMI that keeps its own registry of controllers can start one server per
+controller and tighten the policy:
+
+- `ABBCTL_CONTROLLER=<ip|name>` with `ABBCTL_LOCKED=1` — the server is bound to
+  that controller; `robot_connect` refuses to switch.
+- `ABBCTL_READONLY=1` — every write tool refuses (`robot_stop` stays allowed:
+  stopping is always safe).
+- `HEFESTO_REAL=1` — treat the controller as real (writes need `confirm=true`)
+  even if it reports itself as virtual.
+
+Refusals reach the model with their reason (they are MCP errors, not hidden
+exceptions).
 
 ## Configuration changes and background tasks
 

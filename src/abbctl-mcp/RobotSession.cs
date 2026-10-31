@@ -1,4 +1,4 @@
-using ABB.Robotics.Controllers;
+﻿using ABB.Robotics.Controllers;
 using ABB.Robotics.Controllers.Discovery;
 
 namespace AbbCtl.Mcp;
@@ -23,6 +23,10 @@ internal static class RobotSession
 
     public static void Pin(string target)
     {
+        if (Environment.GetEnvironmentVariable("ABBCTL_LOCKED") == "1")
+            throw new RobotToolException(
+                "REFUSED: this server is bound to one controller (ABBCTL_CONTROLLER); " +
+                "use the MCP server of the other controller instead.");
         lock (Gate)
         {
             _pinnedTarget = target;
@@ -51,7 +55,14 @@ internal static class RobotSession
     /// <summary>Blocks writes on a real controller unless the caller confirmed.</summary>
     public static void EnsureWriteAllowed(Controller c, bool confirm, string operation)
     {
-        if (!c.IsVirtual && !confirm)
+        // Set by HMIs such as Hefesto from their own registry of controllers.
+        if (Environment.GetEnvironmentVariable("ABBCTL_READONLY") == "1")
+            throw new RobotToolException(
+                $"REFUSED: '{operation}': {c.SystemName} is read-only in this session. " +
+                "Tell the user; only they can allow writes (in Hefesto: `hefesto robo escrita <name> liberar`).");
+        // The user's declaration wins over the controller's own claim to be virtual.
+        bool real = !c.IsVirtual || Environment.GetEnvironmentVariable("HEFESTO_REAL") == "1";
+        if (real && !confirm)
             throw new RobotToolException(
                 $"REFUSED: '{operation}' targets a REAL robot ({c.SystemName}). " +
                 "Ask the user for explicit confirmation of this specific action, " +
@@ -110,7 +121,8 @@ internal static class RobotSession
 }
 
 /// <summary>Deliberate tool-level failure whose message is meant for the model.</summary>
-internal sealed class RobotToolException : Exception
+/// <summary>Refusals and tool errors: McpException, so the model sees the message (plain exceptions are hidden).</summary>
+internal sealed class RobotToolException : ModelContextProtocol.McpException
 {
     public RobotToolException(string message) : base(message) { }
 }

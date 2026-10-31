@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using AbbCtl.Commands;
@@ -47,6 +47,7 @@ Commands:
   watch state                            Block until controller state/mode changes
   watch log                              Stream new event log messages
     watch options: [--until <value>] [--follow] [--timeout <s>]
+  monitor [--interval <s>]               Read-only live feed (NDJSON) for HMIs
     exit 0 = change/until reached; exit 3 = timeout
   log [-n <count>]                       Recent event log messages
   fs ls [path]                           List controller files
@@ -123,6 +124,7 @@ Exit codes: 0 ok, 1 runtime error, 2 usage error.";
                     case "pos": return InfoCmd.RunPos(opts, cmdArgs);
                     case "speed": return SpeedCmd.Run(opts, cmdArgs);
                     case "watch": return WatchCmd.Run(opts, cmdArgs);
+                    case "monitor": return MonitorCmd.Run(opts, cmdArgs);
                     case "tasks": return ProgCmd.RunTasks(opts, cmdArgs);
                     case "task": return TaskCmd.Run(opts, cmdArgs);
                     case "cfg": return CfgCmd.Run(opts, cmdArgs);
